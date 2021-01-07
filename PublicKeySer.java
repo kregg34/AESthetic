@@ -1,5 +1,3 @@
-package ransomware;
-
 import java.io.Serializable;
 import java.security.PublicKey;
 
