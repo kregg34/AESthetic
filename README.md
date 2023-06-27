@@ -4,7 +4,7 @@ A hybrid ransomware sample that uses AES-256 in CBC mode and RSA-2048 to encrypt
 
 ## Usage
 
-After compiling the files, open two cmd/terminal windows. First run CommandAndControl and then once thats running, run the Ransomware file.
+After compiling the files, open two cmd/terminal windows. In the first console, run CommandAndControl. Once that's running, run the Ransomware file in the second console.
 
 javac *.java
 
