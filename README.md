@@ -6,6 +6,10 @@ A hybrid ransomware sample that uses AES-256 in CBC mode and RSA-2048 to encrypt
 
 After compiling the files, open two cmd/terminal windows. First run CommandAndControl and then once thats running, run the Ransomware file.
 
+javac *.java
+java CommandAndControl
+java Ransomware
+
 ## Disclaimer
 
 This program is purely for academic/educational use. Someone who can transform this program into a real/practical malicious payload likely had the know-how to do it from scratch anyways.
